@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Полный анализ сайта</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        input {
+            padding: 12px;
+            width: 70%;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        button {
+            padding: 12px 20px;
+            background: #4285f4;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+        #result {
+            margin-top: 25px;
+            padding: 20px;
+            border-radius: 8px;
+            background: #f8f9fa;
+        }
+        .info-block {
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+        .online { color: #34a853; font-weight: bold; }
+        .offline { color: #ea4335; font-weight: bold; }
+        .loading { color: #5f6368; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Анализ сайта</h1>
+        <div>
+            <input type="text" id="domain" placeholder="domain.com" />
+            <button onclick="analyze()">Поиск</button>
+        </div>
+        <div id="result"></div>
+    </div>
+
+    <script>
+        async function analyze() {
+            const domain = document.getElementById('domain').value.trim();
+            if (!domain) return alert('Введите домен сайта');
+            
+            const result = document.getElementById('result');
+            result.innerHTML = '<p class="loading">Идет анализ сайта...</p>';
+            
+            try {
+                // Параллельные запросы
+                const [status, ip, whois] = await Promise.all([
+                    checkStatus(domain),
+                    getIP(domain),
+                    getWhois(domain)
+                ]);
+                
+                // Форматирование результата
+                let html = `
+                    <div class="info-block">
+                        <h3>Основная информация</h3>
+                        <p><strong>Домен:</strong> ${domain}</p>
+                        <p><strong>Статус:</strong> <span class="${status.online ? 'online' : 'offline'}">${
+                            status.online ? 'ОНЛАЙН' : 'ОФФЛАЙН'
+                        }</span> (время ответа: ${status.time} мс)</p>
+                        <p><strong>IP-адрес:</strong> ${ip || 'не найден'}</p>
+                    </div>
+                `;
+                
+                if (whois) {
+                    html += `
+                        <div class="info-block">
+                            <h3>WHOIS информация</h3>
+                            ${whois.creationDate ? `<p><strong>Дата создания:</strong> ${formatDate(whois.creationDate)}</p>` : ''}
+                            ${whois.registrar ? `<p><strong>Регистратор:</strong> ${whois.registrar}</p>` : ''}
+                            ${whois.expiryDate ? `<p><strong>Срок действия:</strong> ${formatDate(whois.expiryDate)}</p>` : ''}
+                        </div>
+                    `;
+                }
+                
+                result.innerHTML = html;
+            } catch (error) {
+                result.innerHTML = `<p style="color: #ea4335;">Ошибка: ${error.message}</p>`;
+            }
+        }
+
+        // Проверка доступности сайта
+        async function checkStatus(domain) {
+            const start = Date.now();
+            try {
+                const response = await fetch(`https://api.codetabs.com/v1/proxy/?quest=http://${domain}`, {
+                    method: 'HEAD',
+                    timeout: 5000
+                });
+                return {
+                    online: response.ok,
+                    time: Date.now() - start
+                };
+            } catch {
+                return {
+                    online: false,
+                    time: Date.now() - start
+                };
+            }
+        }
+
+        // Получение IP через DNS
+        async function getIP(domain) {
+            try {
+                const response = await fetch(`https://dns.google/resolve?name=${domain}&type=A`);
+                const data = await response.json();
+                return data.Answer?.[0]?.data || null;
+            } catch {
+                return null;
+            }
+        }
+
+        // Получение WHOIS данных
+        async function getWhois(domain) {
+            try {
+                const response = await fetch(`https://whois.as207960.net/api/lookup?domain=${domain}`);
+                const data = await response.json();
+                return {
+                    creationDate: data.creation_date,
+                    expiryDate: data.expiry_date,
+                    registrar: data.registrar
+                };
+            } catch {
+                return null;
+            }
+        }
+
+        // Форматирование даты
+        function formatDate(dateStr) {
+            if (!dateStr) return 'неизвестно';
+            try {
+                const date = new Date(dateStr);
+                return date.toLocaleDateString('ru-RU');
+            } catch {
+                return dateStr;
+            }
+        }
+    </script>
+</body>
+</html>
